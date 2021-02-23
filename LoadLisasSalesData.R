@@ -65,13 +65,14 @@ daystosell_allyears <- function() {
 }
 
 safe_profit <-
-  function(priceSold,
+  function(dateSold,
+           priceSold,
            postageSold,
            cogs,
            eBay,
            paypal,
            postageActual) {
-    ifelse(is.na(priceSold), 0, priceSold) +
+    ifelse(is.na(priceSold) & !is.na(dateSold), 0, priceSold) +
       ifelse(is.na(postageSold), 0, postageSold) -
       cogs -
       ifelse(is.na(eBay), 0, eBay) -
@@ -93,6 +94,7 @@ fix_available_amounts <- function(data) {
   data$eBay.Fee <- ifelse(data$Sheet == 0, NA, data$eBay.Fee)
   data$Paypal.fee <- ifelse(data$Sheet == 0, NA, data$Paypal.fee)
   data$Actual.ship <- ifelse(data$Sheet == 0, NA, data$Actual.ship)
+  data$COGS <- ifelse(is.na(data$COGS), 0, data$COGS)
   data
 }
 
@@ -103,7 +105,7 @@ stats_by_week <- function() {
     filter_out_ours() %>% 
     fix_available_amounts %>%
     fix_donation_date() %>%
-    mutate(Profit = safe_profit(Selling.Price, Selling.Postage, COGS, eBay.Fee, Paypal.fee, Actual.ship)) %>%
+    mutate(Profit = safe_profit(Date.Sold, Selling.Price, Selling.Postage, COGS, eBay.Fee, Paypal.fee, Actual.ship)) %>%
     select(c(Date.Purch, Date.Sold, COGS, Profit))
 
 }
