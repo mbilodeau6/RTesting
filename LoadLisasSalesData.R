@@ -1,3 +1,7 @@
+library(lubridate)
+library(ggplot2)
+library(reshape)
+
 loaddata <- function() {
   data <- read.csv("./data/Lisa/AllSalesDataSelectedColumns.csv")
   data$COGS <- abs(data$COGS)
@@ -98,16 +102,49 @@ fix_available_amounts <- function(data) {
   data
 }
 
+week_from_date <- function(date) {
+  posix_date = as.POSIXlt(date)
+  round(((posix_date$year-116)*365 + posix_date$yday + 1)  / 7)  
+}
+
+date_from_week <- function(week) {
+  date_offset <- week * 7
+  date_year <- floor(date_offset / 365) + 116 + 1900
+  day_of_year <- date_offset %% 365 - 1
+  date_string <- paste(date_year, "-", day_of_year, sep="")
+  as.POSIXlt(strptime(date_string, "%Y-%j"))
+}
+
 stats_by_week <- function() {
-  
-  # TODO: Need to associate donated items with a date
-  loaddata() %>% 
+  data <- loaddata() %>% 
     filter_out_ours() %>% 
     fix_available_amounts %>%
-    fix_donation_date() %>%
     mutate(Profit = safe_profit(Date.Sold, Selling.Price, Selling.Postage, COGS, eBay.Fee, Paypal.fee, Actual.ship)) %>%
-    select(c(Date.Purch, Date.Sold, COGS, Profit))
+    mutate(Week.Purch = week_from_date(Date.Purch)) %>%
+    mutate(Week.Sold = week_from_date(Date.Sold))
+  
+  purch_data <- data[data$Sheet != 13, ]
 
+  # TODO: Need to add observations for weeks that had no purchases or sales
+  data_by_week <- data.frame(week = data$Week.Purch, type = "Purch", value = data$COGS)
+  data_by_week <- rbind(data_by_week, data.frame(week = purch_data$Week.Sold, type = "Sold", value = purch_data$Profit))
+
+  data_by_date <- mutate(data_by_week, date=date_from_week(week)) %>%
+    select(date, type, value)
+  
+  data_by_date
+}
+
+graph_count_purch_sale_by_week <- function() {
+  data <- stats_by_week()
+  data_to_graph <- count(data, date, type)
+  data_to_graph$date <- ymd(data_to_graph$date)
+  data_to_graph$date <- ymd(data_to_graph$date)
+  ggplot(data_to_graph, aes(x = date, y = n, colour = type)) + geom_line() + scale_x_date(
+    date_breaks = "1 month",
+    date_labels = "%m-%y",
+    limits = c(as.Date("2017-01-01"), as.Date("2021-03-01"))
+  ) + theme(axis.text.x = element_text(angle = 90)) + ylim(0, 80)
 }
 
 scratch <- function() {
@@ -142,8 +179,12 @@ scratch <- function() {
   
   table(weekdays(data$Date.Purch))
   
-  
   plot(sold_data$COGS, sold_data$Selling.Total - sold_data$Expense.Total, main="Limited Profit $ by COGS", xlab="COGS $", ylab="Profit $", xlim = c(1,15))
   plot(sold_data$Actual.ship, sold_data$Selling.Total - sold_data$Expense.Total, main="Limited Profit $ by Actual Ship $", xlab="Actual Ship $", ylab="Profit $", xlim = c(1, 15))
 
+  data_to_graph <- count(data_by_date, date, type)
+  ggplot(data_to_graph, aes(x = date, y = n, colour = type)) + geom_line()
+  ggplot(data_by_date, aes(x = date, y = value, colour = type)) + geom_line()
+  data_to_graph <- aggregate(.~date+type, data_by_date, sum)
+  ggplot(data_to_graph, aes(x = date, y = value, colour = type)) + geom_line()
 }
